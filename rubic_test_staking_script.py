@@ -324,10 +324,22 @@ class TxSpamer:
     def __get_user_address__(self, user_priv):
         return self.web3.eth.account.privateKeyToAccount(user_priv.strip()).address
 
+    def __decimals__(self, amount):
+        amount = amount.split('.')
+
+        if len(amount) > 1:
+            float_part = amount[1]
+            if len(float_part) < self.POW:
+                float_part = float_part.ljust(self.POW, '0')
+
+            return int(amount[0] + float_part)
+
+        return int(amount[0]) * 10 ** self.POW
+
     def staking(self, user_priv, custom_amount):
         # prepare data
         approve_tx_status = 0
-        custom_amount = int(custom_amount) * 10 ** self.POW
+        custom_amount = self.__decimals__(custom_amount)
 
         user = self.__get_user_address__(user_priv)
         tx_fields = self.__generate_tx_fields__(user)
@@ -388,6 +400,8 @@ class TxSpamer:
         return tx_hash.hex()
 
     def transfer(self, user_priv_from, user_priv_to, amount):
+        amount = self.__decimals__(amount)
+
         user_from = self.__get_user_address__(user_priv_from)
         user_to = self.__get_user_address__(user_priv_to)
 
