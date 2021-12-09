@@ -392,7 +392,7 @@ class TxSpamer:
         user_to = self.__get_user_address__(user_priv_to)
 
         tx_fields = self.__generate_tx_fields__(user_from)
-        transfer = self.token_contract.functions.transfer(user_to, int(amount) * 10 ** 18)
+        transfer = self.token_contract.functions.transfer(user_to, int(amount) * 10 ** self.POW)
 
         return self.__sign_send_tx__(transfer, tx_fields, user_priv_from).hex()
 
