@@ -305,12 +305,14 @@ class TxSpamer:
             'from': user,
         }
 
-    def __sign_send_tx__(self, contract_tx, tx_fields, user_priv):
-        tx = contract_tx.buildTransaction(tx_fields)
-        signed = self.web3.eth.account.sign_transaction(tx, user_priv)
-        raw_tx = signed.rawTransaction
+    def __sign_send_tx__(self, tx_fields, user_priv, contract_tx=None):
+        if contract_tx is not None:
+            tx = contract_tx.buildTransaction(tx_fields)
+            signed = self.web3.eth.account.sign_transaction(tx, user_priv)
+        else:
+            signed = self.web3.eth.account.sign_transaction(tx_fields, user_priv)
 
-        return self.web3.eth.send_raw_transaction(raw_tx)
+        return self.web3.eth.send_raw_transaction(signed.rawTransaction)
 
     def __get_contract_abi__(self):
         url = 'https://api-testnet.bscscan.com/api?module=contract&action=getabi&address=' \
@@ -324,7 +326,7 @@ class TxSpamer:
     def __get_user_address__(self, user_priv):
         return self.web3.eth.account.privateKeyToAccount(user_priv.strip()).address
 
-    def __decimals__(self, amount):
+    def __decimals__(self, amount) -> int:
         amount = amount.split('.')
 
         if len(amount) > 1:
@@ -353,7 +355,7 @@ class TxSpamer:
             approve = self.token_contract.functions.approve(
                 spender=self.staking_contract.address,
                 amount=custom_amount)
-            tx_hash = self.__sign_send_tx__(approve, tx_fields, user_priv)
+            tx_hash = self.__sign_send_tx__(tx_fields, user_priv, approve)
 
             approve_tx = self.web3.eth.wait_for_transaction_receipt(tx_hash.hex())
             approve_tx_status = approve_tx.status
@@ -367,7 +369,7 @@ class TxSpamer:
 
         # if staking call was successfull, do staking
         stake = self.staking_contract.functions.enter(custom_amount)
-        tx_hash = self.__sign_send_tx__(stake, tx_fields, user_priv)
+        tx_hash = self.__sign_send_tx__(tx_fields, user_priv, stake)
 
         # get mintedXRBC
         self.web3.eth.wait_for_transaction_receipt(tx_hash)
@@ -395,20 +397,27 @@ class TxSpamer:
 
         # if leave call was successfull, leave
         leave = self.staking_contract.functions.leave(amount)
-        tx_hash = self.__sign_send_tx__(leave, tx_fields, user_priv)
+        tx_hash = self.__sign_send_tx__(tx_fields, user_priv, leave)
 
         return tx_hash.hex()
 
-    def transfer(self, user_priv_from, user_priv_to, amount):
+    def transfer(self, user_priv_from, user_priv_to, amount, with_contract=True):
         amount = self.__decimals__(amount)
 
         user_from = self.__get_user_address__(user_priv_from)
         user_to = self.__get_user_address__(user_priv_to)
 
         tx_fields = self.__generate_tx_fields__(user_from)
-        transfer = self.token_contract.functions.transfer(user_to, int(amount) * 10 ** self.POW)
 
-        return self.__sign_send_tx__(transfer, tx_fields, user_priv_from).hex()
+        if with_contract:
+            transfer = self.token_contract.functions.transfer(user_to, amount)
+
+            return self.__sign_send_tx__(tx_fields, user_priv_from, transfer).hex()
+
+        tx_fields['to'] = user_to
+        tx_fields['value'] = amount
+
+        return self.__sign_send_tx__(tx_fields, user_priv_from).hex()
 
 
 def split_list(input_list: str) -> list:
@@ -445,6 +454,15 @@ if len(sys.argv) > 1:
         for tx_data in txs_datum:
             try:
                 print(tx_spamer.transfer(sys.argv[3], tx_data[0], tx_data[1]))
+            except Exception as e:
+                print(str(e))
+                break
+    elif arg1 == 'crypto_send':
+        txs_datum = split_list(sys.argv[3])
+
+        for tx_data in txs_datum:
+            try:
+                print(tx_spamer.transfer(sys.argv[2], tx_data[0], tx_data[1], False))
             except Exception as e:
                 print(str(e))
                 break
